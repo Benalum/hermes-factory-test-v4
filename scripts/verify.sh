@@ -33,9 +33,9 @@ PID=$!
 trap "kill $PID 2>/dev/null || true" EXIT
 
 # Wait for app to start and check health
-MAX_TRIES=10
+MAX_TRIES=30
 COUNT=0
-until curl -s localhost:8000/health | grep -q '"status":"ok"'; do
+until curl -s 127.0.0.1:8000/health | grep -q '"status":"ok"'; do
     ((COUNT++))
     if [ $COUNT -ge $MAX_TRIES ]; then
         echo "ERROR: Health check timed out after $MAX_TRIES seconds" >&2

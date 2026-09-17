@@ -25,8 +25,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python3 -m venv venv
+          source venv/bin/activate
+          pip install -r requirements.txt
       - name: Require configured project verification
         run: |
+          source venv/bin/activate
           test -x scripts/verify.sh
           if grep -q 'HERMES_VERIFY_PLACEHOLDER' scripts/verify.sh; then
             echo "ERROR: scripts/verify.sh is still the template placeholder."
@@ -34,7 +43,9 @@ jobs:
             exit 1
           fi
       - name: Run project verification
-        run: ./scripts/verify.sh
+        run: |
+          source venv/bin/activate
+          ./scripts/verify.sh
 
 
   evaluation-schema:

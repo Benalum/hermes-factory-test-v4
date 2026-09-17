@@ -1,0 +1,78 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  repository-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Basic public-repository checks
+        run: |
+          test -f AGENTS.md
+          test -f PROJECT.md
+          test -f metrics/model-evaluations.jsonl
+          test -x scripts/verify.sh
+          test -x scripts/check_candidate.sh
+          test -x scripts/record_evaluation.py
+          test -x scripts/validate_evaluations.py
+          test -f schemas/evaluation.schema.json
+
+  project-verification:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require configured project verification
+        run: |
+          test -x scripts/verify.sh
+          if grep -q 'HERMES_VERIFY_PLACEHOLDER' scripts/verify.sh; then
+            echo "ERROR: scripts/verify.sh is still the template placeholder."
+            echo "The implementation task must replace it with real project verification."
+            exit 1
+          fi
+      - name: Run project verification
+        run: ./scripts/verify.sh
+
+
+  evaluation-schema:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate evaluation delivery
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          test -x scripts/validate_evaluations.py
+          test -f schemas/evaluation.schema.json
+
+          git diff --name-only "$BASE_SHA" "$HEAD_SHA" > /tmp/changed-files.txt
+
+          if grep -Fxq 'metrics/model-evaluations.jsonl' /tmp/changed-files.txt; then
+            echo "Metrics change detected."
+
+            if [ "$(wc -l < /tmp/changed-files.txt | tr -d ' ')" -ne 1 ]; then
+              echo "ERROR: A metrics PR may change only metrics/model-evaluations.jsonl"
+              cat /tmp/changed-files.txt
+              exit 1
+            fi
+
+            ./scripts/validate_evaluations.py \
+
+              metrics/model-evaluations.jsonl \
+
+              --schema schemas/evaluation.schema.json \
+
+              --require-records
+          else
+            echo "No metrics change; evaluation-schema gate not applicable."
+          fi
